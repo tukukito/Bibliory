@@ -315,13 +315,16 @@ $('#photofile').onchange=async e=>{
     if(!codes.some(found))msg('ISBNのバーコードを読み取れませんでした。「978」で始まる上段だけを大きく撮り直すか、手入力してください。');
   }catch(x){msg('読み取れませんでした。撮り直すか、ISBNを手入力してください。')}
 };
-const tryCover=url=>new Promise(ok=>{
+const tryCover=(url,proxied)=>new Promise(ok=>{
+  const px=()=>proxied?Promise.resolve(null):tryCover('https://images.weserv.nl/?w=320&output=jpg&url='+encodeURIComponent(url.replace(/^https?:\/\//,'')),true);
+  const hot=()=>{const i2=new Image();i2.onload=()=>ok(i2.naturalWidth>20?url:null);i2.onerror=()=>ok(null);i2.src=url};
   const im=new Image();im.crossOrigin='anonymous';
   im.onload=()=>{
     if(im.naturalWidth<20)return ok(null);
-    try{const r=Math.min(1,320/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*r);c.height=Math.round(im.naturalHeight*r);c.getContext('2d').drawImage(im,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.75))}catch(e){ok(url)}
+    try{const r=Math.min(1,320/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*r);c.height=Math.round(im.naturalHeight*r);c.getContext('2d').drawImage(im,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.75))}
+    catch(e){px().then(r=>r?ok(r):ok(url))}
   };
-  im.onerror=()=>{const i2=new Image();i2.onload=()=>ok(i2.naturalWidth>20?url:null);i2.onerror=()=>ok(null);i2.src=url};
+  im.onerror=()=>{px().then(r=>r?ok(r):(proxied?ok(null):hot()))};
   im.src=url;
 });
 async function findCover(isbn,first){
@@ -364,7 +367,7 @@ async function lookup(){
   const set=(id,v)=>{if(v&&!$(id).value)$(id).value=v};
   set('#f-title',d.title);set('#f-author',d.author);set('#f-pub',d.publisher);set('#f-pages',d.pages);set('#f-price',d.price);
   if(!cover){const c=await findCover(isbn,d.cover);if(c)setCover(c)}
-  msg(src+'の情報を入力しました。'+(d.price?'':'定価は取得できなかったので、手入力してください。')+(cover?'':'表紙画像は見つかりませんでした。「表紙画像を選ぶ」から追加できます。'));
+  msg(src+'の情報を入力しました。'+(d.price?'':'定価は取得できなかったので、手入力してください。')+(cover?'表紙画像も設定しました。保存すると本棚に並びます。':'表紙画像は見つかりませんでした。「表紙画像を選ぶ」から追加できます。'));
 }
 $('#lookup').onclick=lookup;
 
