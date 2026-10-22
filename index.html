@@ -315,6 +315,20 @@ $('#photofile').onchange=async e=>{
     if(!codes.some(found))msg('ISBNのバーコードを読み取れませんでした。「978」で始まる上段だけを大きく撮り直すか、手入力してください。');
   }catch(x){msg('読み取れませんでした。撮り直すか、ISBNを手入力してください。')}
 };
+const tryCover=url=>new Promise(ok=>{
+  const im=new Image();im.crossOrigin='anonymous';
+  im.onload=()=>{
+    if(im.naturalWidth<20)return ok(null);
+    try{const r=Math.min(1,320/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*r);c.height=Math.round(im.naturalHeight*r);c.getContext('2d').drawImage(im,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.75))}catch(e){ok(url)}
+  };
+  im.onerror=()=>{const i2=new Image();i2.onload=()=>ok(i2.naturalWidth>20?url:null);i2.onerror=()=>ok(null);i2.src=url};
+  im.src=url;
+});
+async function findCover(isbn,first){
+  const list=[first,'https://cover.openbd.jp/'+isbn+'.jpg','https://covers.openlibrary.org/b/isbn/'+isbn+'-L.jpg?default=false'].filter(Boolean);
+  for(const u of list){const r=await tryCover(u);if(r)return r}
+  return '';
+}
 async function toCover(url){
   try{const r=await fetch(url);if(!r.ok)throw 0;return await resize(await r.blob())}catch(e){return url}
 }
@@ -349,8 +363,8 @@ async function lookup(){
   if(!d){msg('どの書誌データベースにも見つかりませんでした。手入力してください。');return}
   const set=(id,v)=>{if(v&&!$(id).value)$(id).value=v};
   set('#f-title',d.title);set('#f-author',d.author);set('#f-pub',d.publisher);set('#f-pages',d.pages);set('#f-price',d.price);
-  if(d.cover&&!cover)setCover(await toCover(d.cover));
-  msg(src+'の情報を入力しました。'+(d.price?'':'定価は取得できなかったので、手入力してください。'));
+  if(!cover){const c=await findCover(isbn,d.cover);if(c)setCover(c)}
+  msg(src+'の情報を入力しました。'+(d.price?'':'定価は取得できなかったので、手入力してください。')+(cover?'':'表紙画像は見つかりませんでした。「表紙画像を選ぶ」から追加できます。'));
 }
 $('#lookup').onclick=lookup;
 
