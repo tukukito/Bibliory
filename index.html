@@ -125,6 +125,24 @@ input[type=date]{min-height:40px}
 .ph b{letter-spacing:.03em;color:#e9d9b6}
 .ph small{color:#bda57a}
 .bk .st{opacity:.92}
+.sorts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:-6px 0 14px}
+.sbtn{border-radius:99px;text-align:center;padding:8px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bw{min-width:0;display:flex;flex-direction:column;gap:6px}
+.rl{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:2px;min-height:44px;padding-bottom:6px}
+.rl .cu{display:flex;gap:1px;width:100%;justify-content:center}
+.rl .cu span{flex:1;max-width:15px;color:#6b5a45;line-height:0}
+.rl .cu span.on{color:var(--acc)}
+.rl .cu svg{width:100%;height:auto;display:block}
+.rl .num{font-family:'Great Vibes','Snell Roundhand','Apple Chancery','Brush Script MT',cursive;font-size:24px;line-height:1.1;color:var(--acc)}
+.rl .no{font-size:11px;color:var(--mute);line-height:1.9}
+.board.rate{height:15px;padding:0 12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:center}
+.board.rate .rl{flex-direction:row;justify-content:center;align-items:center;min-height:0;height:15px;padding:0;gap:3px;min-width:0}
+.board.rate .cu{width:auto;flex:1 1 0;min-width:0;max-width:56px;justify-content:center;align-items:center}
+.board.rate .cu span{max-width:11px}
+.board.rate .cu span{color:rgba(201,162,75,.3)}
+.board.rate .cu span.on{color:var(--acc)}
+.board.rate .num{flex:none;font-size:17px;line-height:15px;height:15px;text-shadow:0 1px 0 rgba(0,0,0,.6)}
+.board.rate .no{color:#8a7458;font-size:10px;line-height:15px}
 .hide{display:none}
 </style>
 </head>
@@ -166,6 +184,7 @@ const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=ymd(new Date());
 const yen=n=>'¥'+Math.round(n).toLocaleString('ja-JP');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let sortKey='new';try{const k=localStorage.getItem('bibliory-sort');if(['hi','lo','new','old'].includes(k))sortKey=k}catch(e){}
 let view='shelf',filter='all',cur={y:new Date().getFullYear(),m:new Date().getMonth()},selDay=today,editId=null;
 
 function render(){
@@ -176,15 +195,23 @@ function render(){
 function shelf(){
   const cnt=k=>k==='all'?books.length:books.filter(b=>b.status===k).length;
   const chips=[['all','すべて'],['read','読了'],['owned','積読'],['wish','読みたい']].map(([k,n])=>`<button class="chip ${filter===k?'on':''}" data-f="${k}">${n} ${cnt(k)}</button>`).join('');
-  const list=books.filter(b=>filter==='all'||b.status===filter);
-  const cell=b=>`<button class="bk" style="--c:${ST[b.status].c}" data-id="${b.id}" aria-label="${esc(b.title)}">${b.cover?`<img src="${b.cover}" alt="">`:`<span class="ph"><b>${esc(b.title)}</b><small>${esc(b.author)}</small></span>`}<i class="st"></i></button>`;
+  const rd=b=>b.readDate||'',rt=b=>b.rating||0;
+  const ord=b=>Number(b.id)||0;
+  const CMP={new:(a,b)=>(!rd(a)-!rd(b))||rd(b).localeCompare(rd(a))||ord(b)-ord(a),old:(a,b)=>(!rd(a)-!rd(b))||rd(a).localeCompare(rd(b))||ord(a)-ord(b),hi:(a,b)=>(!rt(a)-!rt(b))||rt(b)-rt(a)||rd(b).localeCompare(rd(a))||ord(b)-ord(a),lo:(a,b)=>(!rt(a)-!rt(b))||rt(a)-rt(b)||rd(b).localeCompare(rd(a))||ord(b)-ord(a)};
+  const list=books.filter(b=>filter==='all'||b.status===filter).sort(CMP[sortKey]);
+  const sorts=[['hi','評価が高い順'],['lo','評価が低い順'],['new','読了日が新しい順'],['old','読了日が古い順']].map(([k,n])=>`<button class="chip sbtn ${sortKey===k?'on':''}" data-s="${k}">${n}</button>`).join('');
+  const cell0=b=>`<button class="bk" style="--c:${ST[b.status].c}" data-id="${b.id}" aria-label="${esc(b.title)}">${b.cover?`<img src="${b.cover}" alt="">`:`<span class="ph"><b>${esc(b.title)}</b><small>${esc(b.author)}</small></span>`}<i class="st"></i></button>`;
+  const byRate=sortKey==='hi'||sortKey==='lo';
+  const cell=cell0;
+  const plaque=b=>`<div class="rl">${b.rating?`<div class="cu">${[1,2,3,4,5].map(n=>`<span class="${b.rating>=n-.5?'on':''}">${CUP(lv(b.rating,n))}</span>`).join('')}</div><span class="num">${b.rating}</span>`:'<span class="no">未評価</span>'}</div>`;
   const rows=Math.max(1,Math.ceil(list.length/4));let h='';
   for(let r=0;r<rows;r++){
     const sl=list.slice(r*4,r*4+4).map(cell);
     while(sl.length<4)sl.push('<span class="bk void"></span>');
-    h+=`<div class="shelf"><div class="slots">${sl.join('')}</div><div class="board"></div></div>`;
+    const bd=byRate?`<div class="board rate">${list.slice(r*4,r*4+4).map(plaque).join('')}</div>`:'<div class="board"></div>';
+    h+=`<div class="shelf"><div class="slots">${sl.join('')}</div>${bd}</div>`;
   }
-  return `<div class="chips">${chips}</div><div class="case">${h}</div>`+(list.length?'':`<div class="empty">まだ本がありません。<br>右下の「本を追加」から登録できます。</div>`);
+  return `<div class="chips">${chips}</div><div class="sorts" role="group" aria-label="並び順">${sorts}</div><div class="case">${h}</div>`+(list.length?'':`<div class="empty">まだ本がありません。<br>右下の「本を追加」から登録できます。</div>`);
 }
 function shelfOld(){
   const cnt=k=>k==='all'?books.length:books.filter(b=>b.status===k).length;
@@ -372,10 +399,11 @@ async function lookup(){
 $('#lookup').onclick=lookup;
 
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-v],[data-f],[data-id],[data-mv],[data-d],[data-m]');if(!t)return;
+  const t=e.target.closest('[data-v],[data-f],[data-s],[data-id],[data-mv],[data-d],[data-m]');if(!t)return;
   const d=t.dataset;
   if(d.v)view=d.v;
   else if(d.f)filter=d.f;
+  else if(d.s){sortKey=d.s;try{localStorage.setItem('bibliory-sort',sortKey)}catch(x){}}
   else if(d.id)return openDlg(d.id);
   else if(d.mv){cur.m+=+d.mv;if(cur.m<0){cur.m=11;cur.y--}if(cur.m>11){cur.m=0;cur.y++}}
   else if(d.d)selDay=d.d;
