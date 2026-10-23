@@ -367,7 +367,7 @@ async function lookup(){
   const set=(id,v)=>{if(v&&!$(id).value)$(id).value=v};
   set('#f-title',d.title);set('#f-author',d.author);set('#f-pub',d.publisher);set('#f-pages',d.pages);set('#f-price',d.price);
   if(!cover){const c=await findCover(isbn,d.cover);if(c)setCover(c)}
-  msg(src+'の情報を入力しました。'+(d.price?'':'定価は取得できなかったので、手入力してください。')+(cover?'表紙画像も設定しました。保存すると本棚に並びます。':'表紙画像は見つかりませんでした。「表紙画像を選ぶ」から追加できます。'));
+  msg(src+'の情報を入力しました。'+(d.price?'【定価は要確認】登録されている価格は出版時のもので、現在の価格と異なることがあります。本の裏表紙で確認してください。':'定価は取得できなかったので、手入力してください。')+(cover?'表紙画像も設定しました。保存すると本棚に並びます。':'表紙画像は見つかりませんでした。「表紙画像を選ぶ」から追加できます。'));
 }
 $('#lookup').onclick=lookup;
 
