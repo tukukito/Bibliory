@@ -347,7 +347,7 @@ $('#scan').onclick=async()=>{
       await loadZX();
       if(!scanning)return;
       zr=new ZXing.BrowserMultiFormatReader();
-      const cb=r=>{if(r)found(r.getText())};
+      const cb=r=>{if(scanning&&r)found(r.getText())};
       if(typeof zr.decodeFromStream==='function')zr.decodeFromStream(stream,v,cb).catch(fail);
       else{stream.getTracks().forEach(t=>t.stop());stream=null;zr.decodeFromConstraints({video:{facingMode:'environment'}},v,cb).catch(fail)}
     }
@@ -383,7 +383,9 @@ async function findCover(isbn,first){
 async function toCover(url){
   try{const r=await fetch(url);if(!r.ok)throw 0;return await resize(await r.blob())}catch(e){return url}
 }
-async function lookup(){
+let lookBusy=false;
+async function lookup(){if(lookBusy)return;lookBusy=true;try{await lookup0()}finally{lookBusy=false}}
+async function lookup0(){
   const isbn=$('#f-isbn').value.replace(/[-\s]/g,'');
   if(!isbnOk(isbn)){msg('ISBNは「978」か「979」で始まる13桁の数字で入力してください。');return}
   msg('書籍情報を検索しています…');
