@@ -270,7 +270,7 @@ function openDlg(id){
   $('#dt').textContent=id?'本の情報を編集':'本を追加';
   $('#f-status').value=b.status;$('#f-title').value=b.title||'';$('#f-author').value=b.author||'';$('#f-pub').value=b.publisher||'';
   $('#f-pages').value=b.pages||'';$('#f-price').value=b.price||'';$('#f-buy').value=b.buyDate||'';$('#f-read').value=b.readDate||'';$('#f-isbn').value=b.isbn||'';setCover(b.cover||'');msg('');lastIsbn=b.isbn||'';pw(false);rateOn=!!b.rating;rate=b.rating||0;$('#f-note').value=b.note||'';drawCups();
-  $('#del').classList.toggle('hide',!id);fields();$('#dlg').showModal();
+  $('#del').classList.toggle('hide',!id);fields();$('#dlg').showModal();if(!('BarcodeDetector' in window))loadZX().catch(()=>{});
 }
 function fields(){const s=$('#f-status').value;$('#l-buy').classList.toggle('hide',s==='wish');$('#l-read').classList.toggle('hide',s!=='read')}
 $('#f-status').onchange=()=>{fields();const s=$('#f-status').value;if(s==='read'&&!$('#f-read').value)$('#f-read').value=today;if(s!=='wish'&&!$('#f-buy').value)$('#f-buy').value=today}
@@ -322,18 +322,34 @@ const loadZX=()=>window.ZXing?Promise.resolve():new Promise((ok,ng)=>{const s=do
 function stopScan(){scanning=false;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}if(zr){try{zr.reset()}catch(e){}zr=null}$('#vid').classList.add('hide')}
 function found(t){t=String(t).replace(/\D/g,'');if(!isbnOk(t))return false;$('#f-isbn').value=t;stopScan();lookup();return true}
 $('#dlg').addEventListener('close',stopScan);
+const camErr=e=>{const n=(e&&e.name)||'',tail='「写真から読み取る」か、ISBNの手入力もお使いいただけます。';
+  if(n==='NotAllowedError'||n==='SecurityError'||n==='PermissionDeniedError')return 'カメラの使用が許可されていません。端末の設定で、このアプリ（またはブラウザ）にカメラを許可してください。'+tail;
+  if(n==='NotFoundError'||n==='OverconstrainedError')return 'カメラが見つかりませんでした。'+tail;
+  if(n==='NotReadableError')return 'カメラを開けませんでした。ほかのアプリで使われている可能性があります。'+tail;
+  if(n==='NoMediaDevices')return 'この環境ではカメラを使えません。HTTPSのページで開いているか確認してください。'+tail;
+  if(e&&e.type==='error'&&!n)return '読み取り用の部品を読み込めませんでした。通信状態を確認してください。'+tail;
+  return '['+(n||'エラー')+'] カメラを使えませんでした。'+tail};
 $('#scan').onclick=async()=>{
   if(scanning){stopScan();msg('');return}
-  const v=$('#vid'),fail=e=>{stopScan();msg((e&&e.name?'['+e.name+'] ':'')+'カメラを使えませんでした。「写真から読み取る」か、ISBNの手入力をお使いください。')};
+  const v=$('#vid'),fail=e=>{stopScan();msg(camErr(e))};
   try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw {name:'NoMediaDevices'};
+    scanning=true;msg('カメラを起動しています…');
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    if(!scanning){stopScan();return}
+    v.setAttribute('playsinline','');v.muted=true;v.srcObject=stream;v.classList.remove('hide');
+    await v.play();
+    msg('「978」で始まるバーコードを映してください');
     if('BarcodeDetector' in window){
       const det=new BarcodeDetector({formats:['ean_13']});
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-      v.srcObject=stream;await v.play();v.classList.remove('hide');scanning=true;msg('「978」で始まるバーコードを映してください');
       const loop=async()=>{if(!scanning)return;try{for(const x of await det.detect(v))if(found(x.rawValue))return}catch(e){}setTimeout(loop,250)};loop();
     }else{
-      await loadZX();zr=new ZXing.BrowserMultiFormatReader();scanning=true;v.classList.remove('hide');msg('「978」で始まるバーコードを映してください');
-      zr.decodeFromConstraints({video:{facingMode:'environment'}},v,r=>{if(r)found(r.getText())}).catch(fail);
+      await loadZX();
+      if(!scanning)return;
+      zr=new ZXing.BrowserMultiFormatReader();
+      const cb=r=>{if(r)found(r.getText())};
+      if(typeof zr.decodeFromStream==='function')zr.decodeFromStream(stream,v,cb).catch(fail);
+      else{stream.getTracks().forEach(t=>t.stop());stream=null;zr.decodeFromConstraints({video:{facingMode:'environment'}},v,cb).catch(fail)}
     }
   }catch(e){fail(e)}
 };
