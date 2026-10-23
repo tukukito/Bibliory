@@ -143,6 +143,8 @@ input[type=date]{min-height:40px}
 .board.rate .cu span.on{color:var(--acc)}
 .board.rate .num{flex:none;font-size:17px;line-height:15px;height:15px;text-shadow:0 1px 0 rgba(0,0,0,.6)}
 .board.rate .no{color:#8a7458;font-size:10px;line-height:15px}
+.warn{padding:9px 11px;border:1px solid var(--danger);border-left-width:5px;border-radius:4px;background:rgba(217,112,95,.16);color:var(--ink);font-size:13px;line-height:1.6}
+.warn b{display:block;color:var(--danger);font-size:15px;letter-spacing:.04em;margin-bottom:2px}
 .hide{display:none}
 </style>
 </head>
@@ -159,12 +161,13 @@ input[type=date]{min-height:40px}
 <dialog id="dlg"><div class="dlg">
 <h2 id="dt">本を追加</h2>
 <div class="scan"><label>ISBN（本の裏のバーコードの数字）<div class="isbn"><input id="f-isbn" inputmode="numeric" placeholder="978で始まる13桁"><button type="button" class="sb" id="lookup">自動入力</button></div></label>
-<div class="scanbtns"><button type="button" class="sb" id="scan">カメラで読み取る</button><button type="button" class="sb" id="photo">写真から読み取る</button></div>
+<div class="scanbtns"><button type="button" class="sb" id="scan">カメラで読み取る</button><button type="button" class="sb" id="photo">写真から読み取る</button><button type="button" class="sb" id="clearall">入力をすべて消す</button></div>
 <input type="file" id="photofile" accept="image/*" class="hide"><video id="vid" class="hide" playsinline muted></video><div class="meta" id="smsg"></div></div>
 <label>状態<select id="f-status"><option value="read">読み終わった</option><option value="owned">買った（未読）</option><option value="wish">読みたい（未購入）</option></select></label>
 <label>タイトル<input id="f-title"></label>
 <div class="two"><label>作者<input id="f-author"></label><label>出版社<input id="f-pub"></label></div>
 <div class="two"><label>ページ数<input id="f-pages" type="number" min="0" inputmode="numeric"></label><label>定価（税込）<input id="f-price" type="number" min="0" inputmode="numeric"></label></div>
+<div class="warn hide" id="pwarn" role="alert"><b>【定価は要確認】</b>登録されている価格は出版時のものです。現在の価格と異なることがあるため、本の裏表紙で確認してください。</div>
 <div class="two"><label id="l-buy">購入日<input id="f-buy" type="date"></label><label id="l-read">読了日<input id="f-read" type="date"></label></div>
 <div class="rrow"><button type="button" class="sb" id="rate-on" aria-pressed="false">評価する</button><button type="button" class="sb on" id="rate-off" aria-pressed="true">評価しない</button><div class="cups hide" id="cups"></div></div>
 <label>note<textarea id="f-note" placeholder="感想・メモ・気になった箇所など"></textarea></label>
@@ -266,7 +269,7 @@ function openDlg(id){
   editId=id||null;const b=books.find(x=>x.id===id)||{status:'read',buyDate:today,readDate:today};
   $('#dt').textContent=id?'本の情報を編集':'本を追加';
   $('#f-status').value=b.status;$('#f-title').value=b.title||'';$('#f-author').value=b.author||'';$('#f-pub').value=b.publisher||'';
-  $('#f-pages').value=b.pages||'';$('#f-price').value=b.price||'';$('#f-buy').value=b.buyDate||'';$('#f-read').value=b.readDate||'';$('#f-isbn').value=b.isbn||'';setCover(b.cover||'');msg('');rateOn=!!b.rating;rate=b.rating||0;$('#f-note').value=b.note||'';drawCups();
+  $('#f-pages').value=b.pages||'';$('#f-price').value=b.price||'';$('#f-buy').value=b.buyDate||'';$('#f-read').value=b.readDate||'';$('#f-isbn').value=b.isbn||'';setCover(b.cover||'');msg('');lastIsbn=b.isbn||'';pw(false);rateOn=!!b.rating;rate=b.rating||0;$('#f-note').value=b.note||'';drawCups();
   $('#del').classList.toggle('hide',!id);fields();$('#dlg').showModal();
 }
 function fields(){const s=$('#f-status').value;$('#l-buy').classList.toggle('hide',s==='wish');$('#l-read').classList.toggle('hide',s!=='read')}
@@ -306,6 +309,8 @@ $('#cups').onclick=e=>{const b=e.target.closest('[data-r]');if(!b)return;const n
 const extra=b=>(b.rating?`<div style="margin-top:4px"><span class="mini">${[1,2,3,4,5].map(n=>`<span class="${b.rating>=n-.5?'on':''}">${CUP(lv(b.rating,n))}</span>`).join('')}</span></div>`:'')+(b.note?`<div class="nt">${esc(b.note)}</div>`:'');
 let cover='',stream=null,zr=null,scanning=false;
 const msg=t=>{$('#smsg').textContent=t};
+const pw=v=>$('#pwarn').classList.toggle('hide',!v);
+let lastIsbn='';
 function setCover(c){cover=c;const i=$('#cprev');i.src=c||'';i.classList.toggle('hide',!c);$('#cdel').classList.toggle('hide',!c)}
 function resize(file){return new Promise((ok,ng)=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{const r=Math.min(1,320/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*r);c.height=Math.round(im.height*r);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',.75))};im.onerror=()=>ng();im.src=u})}
 $('#cpick').onclick=()=>$('#cfile').click();
@@ -390,13 +395,18 @@ async function lookup(){
       if(v&&v.title){d={title:v.title,author:(v.authors||[]).map(a=>a.name).join(' '),publisher:(v.publishers||[]).map(p=>p.name).join(' '),pages:v.number_of_pages,cover:v.cover&&v.cover.medium};src='Open Library'}
     }catch(e){}
   }
-  if(!d){msg('どの書誌データベースにも見つかりませんでした。手入力してください。');return}
-  const set=(id,v)=>{if(v&&!$(id).value)$(id).value=v};
+  if(!d){msg('どの書誌データベースにも見つかりませんでした。手入力してください。'+(lastIsbn&&lastIsbn!==isbn?'前のISBNの情報が残っている場合は、「入力をすべて消す」で消せます。':''));return}
+  const changed=lastIsbn!==isbn;
+  const set=(id,v)=>{$(id).value=v||''};
   set('#f-title',d.title);set('#f-author',d.author);set('#f-pub',d.publisher);set('#f-pages',d.pages);set('#f-price',d.price);
-  if(!cover){const c=await findCover(isbn,d.cover);if(c)setCover(c)}
-  msg(src+'の情報を入力しました。'+(d.price?'【定価は要確認】登録されている価格は出版時のもので、現在の価格と異なることがあります。本の裏表紙で確認してください。':'定価は取得できなかったので、手入力してください。')+(cover?'表紙画像も設定しました。保存すると本棚に並びます。':'表紙画像は見つかりませんでした。「表紙画像を選ぶ」から追加できます。'));
+  if(!cover||changed){const c=await findCover(isbn,d.cover);if(c)setCover(c);else if(changed)setCover('')}
+  lastIsbn=isbn;
+  pw(!!d.price);
+  msg(src+'の情報で更新しました。'+(d.price?'':'定価は取得できなかったので、手入力してください。')+(cover?'表紙画像も設定しました。保存すると本棚に並びます。':'表紙画像は見つかりませんでした。「表紙画像を選ぶ」から追加できます。'));
 }
 $('#lookup').onclick=lookup;
+$('#f-price').addEventListener('input',()=>pw(false));
+$('#clearall').onclick=()=>{stopScan();['#f-isbn','#f-title','#f-author','#f-pub','#f-pages','#f-price'].forEach(i=>{$(i).value=''});setCover('');lastIsbn='';pw(false);msg('ISBNと本の情報を消しました。')};
 
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-v],[data-f],[data-s],[data-id],[data-mv],[data-d],[data-m]');if(!t)return;
